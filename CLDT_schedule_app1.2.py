@@ -376,18 +376,37 @@ if generate_clicked:
 
     e_pl = {p: pulp.LpVariable(f"exposed_pl_{p}", 0, 1, cat="Binary") for p in people}
     
+    h_pl = {
+        p: pulp.LpVariable(f"h_pl_{p}", 0, 1, cat="Binary")
+        for p in people
+    }
+
+    h_gsl = {
+        p: pulp.LpVariable(f"h_gsl_{p}", 0, 1, cat="Binary")
+        for p in people
+    }
+
     PL_COUNT = {
-    p: pulp.lpSum(x[p, t, role_PL] + x[p, t, role_PSG] for t in shifts)
-    for p in people
+        p: pulp.lpSum(
+            x[p, t, role_PL] + x[p, t, role_PSG]
+            for t in shifts
+        )
+        for p in people
     }
 
     GSL_COUNT = {
-    p: pulp.lpSum(g[p, t] for t in shifts)
-    for p in people
+        p: pulp.lpSum(g[p, t] for t in shifts)
+        for p in people
     }
 
-    
     e_g  = {p: pulp.LpVariable(f"exposed_g_{p}", 0, 1, cat="Binary") for p in people}
+
+    for p in people:
+        model += PL_COUNT[p] >= h_pl[p]
+        model += PL_COUNT[p] <= T * h_pl[p]
+
+        model += GSL_COUNT[p] >= h_gsl[p]
+        model += GSL_COUNT[p] <= T * h_gsl[p]
 
     zmax = pulp.LpVariable("zmax", lowBound=0, cat="Integer")
     zmin = pulp.LpVariable("zmin", lowBound=0, cat="Integer")
@@ -461,11 +480,7 @@ if generate_clicked:
 
     if ENFORCE_PL_FAIRNESS:
         for p in people:
-            model += PL_COUNT[p] <= 1 + pulp.lpSum(
-                PL_COUNT[q] - 1
-                for q in people
-            )
-
+            model += PL_COUNT[p] <= 1 + pulp.lpSum(h_pl[q] for q in people) - P
 
     if ENFORCE_GSL_FAIRNESS:
         for s_idx in range(S):
@@ -473,10 +488,8 @@ if generate_clicked:
             n_s = len(squad_people)
 
             for p in squad_people:
-                model += GSL_COUNT[p] <= 1 + pulp.lpSum(
-                    GSL_COUNT[q] - 1
-                    for q in squad_people
-                )
+                model += GSL_COUNT[p] <= 1 + pulp.lpSum(h_gsl[q] for q in squad_people) - n_s
+
 
 
     # --------------------------------------------------------
@@ -501,8 +514,8 @@ if generate_clicked:
         st.warning(
             "Strict fairness was infeasible. "
             "Disable one or more fairness options to proceed. "
-            "Best-effort fairness was applied instead."
         )
+        st.stop()
 
     st.success("✅ Schedule generated with guaranteed leadership exposure")
     # Log successful schedule generation
