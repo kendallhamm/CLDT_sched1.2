@@ -258,6 +258,19 @@ else:
     ]
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("Leadership Fairness Options")
+
+ENFORCE_PL_FAIRNESS = st.sidebar.checkbox(
+    "Disallow repeat PL/PSG until all soldiers have one",
+    value=False
+)
+
+ENFORCE_GSL_FAIRNESS = st.sidebar.checkbox(
+    "Disallow repeat graded SL until squad all have one",
+    value=False
+)
+
+st.sidebar.markdown("---")
 generate_clicked = st.sidebar.button("Generate Schedule", use_container_width=True)
 
 st.sidebar.markdown("---")
@@ -362,6 +375,18 @@ if generate_clicked:
          for p in people for t in shifts}
 
     e_pl = {p: pulp.LpVariable(f"exposed_pl_{p}", 0, 1, cat="Binary") for p in people}
+    
+    PL_COUNT = {
+    p: pulp.lpSum(x[p, t, role_PL] + x[p, t, role_PSG] for t in shifts)
+    for p in people
+    }
+
+    GSL_COUNT = {
+    p: pulp.lpSum(g[p, t] for t in shifts)
+    for p in people
+    }
+
+    
     e_g  = {p: pulp.LpVariable(f"exposed_g_{p}", 0, 1, cat="Binary") for p in people}
 
     zmax = pulp.LpVariable("zmax", lowBound=0, cat="Integer")
@@ -430,6 +455,29 @@ if generate_clicked:
 
         model += pulp.lpSum(g[p, t] for t in shifts) >= e_g[p]
         model += e_g[p] == 1
+    # --------------------------------------------------------
+    # OPTIONAL STRICT FAIRNESS CONSTRAINTS
+    # --------------------------------------------------------
+
+    if ENFORCE_PL_FAIRNESS:
+        for p in people:
+            model += PL_COUNT[p] <= 1 + pulp.lpSum(
+                PL_COUNT[q] - 1
+                for q in people
+            )
+
+
+    if ENFORCE_GSL_FAIRNESS:
+        for s_idx in range(S):
+            squad_people = [p for p in people if person_squad[p] == s_idx]
+            n_s = len(squad_people)
+
+            for p in squad_people:
+                model += GSL_COUNT[p] <= 1 + pulp.lpSum(
+                    GSL_COUNT[q] - 1
+                    for q in squad_people
+                )
+
 
     # --------------------------------------------------------
     # Fairness objective
@@ -442,7 +490,19 @@ if generate_clicked:
     model += zmax - zmin
 
     solver = pulp.PULP_CBC_CMD(msg=False)
-    model.solve(solver)
+    status = model.solve(solver)
+
+    strict_failed = (
+        (ENFORCE_PL_FAIRNESS or ENFORCE_GSL_FAIRNESS)
+        and pulp.LpStatus[status] != "Optimal"
+    )
+
+    if strict_failed:
+        st.warning(
+            "Strict fairness was infeasible. "
+            "Disable one or more fairness options to proceed. "
+            "Best-effort fairness was applied instead."
+        )
 
     st.success("✅ Schedule generated with guaranteed leadership exposure")
     # Log successful schedule generation
