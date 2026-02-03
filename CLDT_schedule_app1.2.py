@@ -380,6 +380,12 @@ if generate_clicked:
         p: pulp.LpVariable(f"h_pl_{p}", 0, 1, cat="Binary")
         for p in people
     }
+    
+    HAD_PL = {
+       (p, t): pulp.LpVariable(f"had_pl_{p}_{t}", 0, 1, cat="Binary")
+       for p in people for t in shifts
+    }
+ 
 
     h_gsl = {
         p: pulp.LpVariable(f"h_gsl_{p}", 0, 1, cat="Binary")
@@ -393,6 +399,13 @@ if generate_clicked:
         )
         for p in people
     }
+    CUM_PL = {
+        (p, t): pulp.lpSum(
+            x[p, tau, role_PL] + x[p, tau, role_PSG]
+            for tau in range(t + 1)
+        )
+        for p in people for t in shifts
+    }
 
     GSL_COUNT = {
         p: pulp.lpSum(g[p, t] for t in shifts)
@@ -401,12 +414,21 @@ if generate_clicked:
 
     e_g  = {p: pulp.LpVariable(f"exposed_g_{p}", 0, 1, cat="Binary") for p in people}
 
+    # Link PL_COUNT to h_pl
     for p in people:
         model += PL_COUNT[p] >= h_pl[p]
         model += PL_COUNT[p] <= T * h_pl[p]
+    # Link cumulative PL to time indicators
+    for p in people:
+        for t in shifts:
+            model += CUM_PL[p, t] >= HAD_PL[p, t]
+            model += CUM_PL[p, t] <= T * HAD_PL[p, t]
 
+    # Link graded SL count
+    for p in people:
         model += GSL_COUNT[p] >= h_gsl[p]
         model += GSL_COUNT[p] <= T * h_gsl[p]
+
 
     zmax = pulp.LpVariable("zmax", lowBound=0, cat="Integer")
     zmin = pulp.LpVariable("zmin", lowBound=0, cat="Integer")
@@ -479,8 +501,13 @@ if generate_clicked:
     # --------------------------------------------------------
 
     if ENFORCE_PL_FAIRNESS:
-        for p in people:
-            model += PL_COUNT[p] <= 1 + pulp.lpSum(h_pl[q] for q in people) - P
+        for t in shifts:
+            for p in people:
+                model += (
+                    CUM_PL[p, t]
+                    <= 1 + pulp.lpSum(HAD_PL[q, t] for q in people) - P
+                )
+
 
     if ENFORCE_GSL_FAIRNESS:
         for s_idx in range(S):
@@ -547,7 +574,7 @@ if generate_clicked:
     max_people = [p for p, v in leadership_totals.items() if v == max_val]
     min_people = [p for p, v in leadership_totals.items() if v == min_val]
 
-    st.markdown("###Overall Leadership Load (SL + PL + PSG)")
+    st.markdown("### Overall Leadership Load (SL + PL + PSG)")
     st.text(
         f"Max SL+PL+PSG shifts: {max_val}  ({', '.join(max_people)})\n"
         f"Min SL+PL+PSG shifts: {min_val}  ({', '.join(min_people)})\n"
