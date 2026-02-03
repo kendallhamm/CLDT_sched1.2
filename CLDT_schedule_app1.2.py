@@ -265,10 +265,10 @@ ENFORCE_PL_FAIRNESS = st.sidebar.checkbox(
     value=False
 )
 
-ENFORCE_GSL_FAIRNESS = st.sidebar.checkbox(
-    "Disallow repeat graded SL until squad all have one",
-    value=False
-)
+# ENFORCE_GSL_FAIRNESS = st.sidebar.checkbox(
+#     "Disallow repeat graded SL until squad all have one",
+#     value=False
+# )
 
 st.sidebar.markdown("---")
 generate_clicked = st.sidebar.button("Generate Schedule", use_container_width=True)
