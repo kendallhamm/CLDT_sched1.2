@@ -5,6 +5,15 @@ import io
 import math
 import requests
 
+# Notes as of 3 FEB 26
+# Tried to add temporal PSG/PL balancing- so that no one gets 2nd PL/PSG until everyone had one first. 
+# Because of the no back to back rule, the SL reqts, and the RTO/MED chained dependency to PL/PSG this presents an infeasible solution unless:
+# TotalShifts >= PLTSize + 1
+# which realisitcally is unlikely to be false in my understanding of the problem scope. 
+# CLDT2025 had 27 shifts (hard number) and my platoon was 32 pax, with some being larger even. It is unlikely that this constraint will be met.
+# Recommend using CLDT_sched1.1 instead.
+
+
 # ============================================================
 # CLDT Leadership Schedule Builder
 #
